@@ -5,6 +5,7 @@ class Transaction(Base):
     __tablename__ = "transactions"
 
     id = Column(String, primary_key=True)
-    amount = Column(Integer)
     category = Column(String)
+    price = Column(Integer)
+    quantity = Column(Integer)
     date = Column(String)
