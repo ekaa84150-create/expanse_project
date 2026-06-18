@@ -22,7 +22,6 @@ class TransactionSchema(BaseModel):
     @field_validator('date')
     @classmethod
     def validate_date_format(cls, value: str) -> str:
-        # Kita sekalian samakan validasinya ke DD-MM-YYYY sesuai description di atas ya
         try:
             datetime.strptime(value, "%d-%m-%Y")
             return value
@@ -33,8 +32,6 @@ class TransactionSchema(BaseModel):
 # 2. CREATE TRANSACTION (POST /transactions)
 @router.post("/", status_code=status.HTTP_201_CREATED)
 def create_transaction(transaction: TransactionSchema, db: Session = Depends(get_db)):
-    # Karena schema input (Pydantic) dan model (SQLAlchemy) kolomnya sudah sama,
-    # kita bisa langsung dump datanya otomatis ke database!
     db_transaction = models.Transaction(**transaction.model_dump())
     db_transaction.id = str(uuid.uuid4())
 
@@ -54,7 +51,50 @@ def get_transactions(db: Session = Depends(get_db)):
     return db.query(models.Transaction).all()
 
 
-# 4. READ BY ID (GET /transactions/{transaction_id})
+# 4. SUMMARY BY CATEGORY (Statis ditaruh di atas dinamis)
+@router.get("/summary/categories")
+def get_category_summary(db: Session = Depends(get_db)):
+    all_transactions = db.query(models.Transaction).all()
+    summary = {}
+    for t in all_transactions:
+        total_cost = t.price * t.quantity
+        if t.category in summary:
+            summary[t.category] += total_cost
+        else:
+            summary[t.category] = total_cost
+    return summary
+
+
+# 5. TOTAL EXPENDITURE (Statis ditaruh di atas dinamis)
+@router.get("/total")
+def get_total_expenditure(db: Session = Depends(get_db)):
+    all_transactions = db.query(models.Transaction).all()
+
+    total_expenditure = 0
+    total_item_bought = 0
+
+    for t in all_transactions:
+        total_expenditure += (t.price * t.quantity)
+        total_item_bought += t.quantity
+    return {
+        "total_expenditure": total_expenditure,
+        "total_item_bought": total_item_bought
+    }
+
+#5.5 Filter By Month And Year
+@router.get ("/filter")
+def filter_transactions_by_date(month: str, year: str, db: Session = Depends(get_db)):
+    date_pattern = f"%-{month}-{year}"
+    
+    filtered_data = db.query(models.Transaction).filter(models.Transaction.date.like(date_pattern)).all()
+    return {
+        "month": month,
+        "year": year,
+        "total_found": len(filtered_data),
+        "transactions": filtered_data
+    }
+
+# 6. READ BY ID (GET /transactions/{transaction_id})
 @router.get("/{transaction_id}")
 def get_transaction(transaction_id: str, db: Session = Depends(get_db)):
     transaction = db.query(models.Transaction).filter(models.Transaction.id == transaction_id).first()
@@ -68,7 +108,7 @@ def get_transaction(transaction_id: str, db: Session = Depends(get_db)):
     }
 
 
-# 5. DELETE BY ID (DELETE /transactions/{transaction_id})
+# 7. DELETE BY ID (DELETE /transactions/{transaction_id})
 @router.delete("/{transaction_id}")
 def delete_transaction(transaction_id: str, db: Session = Depends(get_db)):
     transaction = db.query(models.Transaction).filter(models.Transaction.id == transaction_id).first()
@@ -84,7 +124,7 @@ def delete_transaction(transaction_id: str, db: Session = Depends(get_db)):
     }
 
 
-# 6. UPDATE BY ID (PUT /transactions/{transaction_id})
+# 8. UPDATE BY ID (PUT /transactions/{transaction_id})
 @router.put("/{transaction_id}")
 def update_transaction(transaction_id: str, updated_transaction: TransactionSchema, db: Session = Depends(get_db)):
     transaction = db.query(models.Transaction).filter(models.Transaction.id == transaction_id).first()
@@ -92,7 +132,6 @@ def update_transaction(transaction_id: str, updated_transaction: TransactionSche
     if not transaction:
         raise HTTPException(status_code=404, detail="Transaction not found")
 
-    # Di sini kita ganti pemetaan kolom lamanya menjadi price & quantity
     transaction.category = updated_transaction.category
     transaction.price = updated_transaction.price
     transaction.quantity = updated_transaction.quantity
@@ -105,16 +144,3 @@ def update_transaction(transaction_id: str, updated_transaction: TransactionSche
         "message": "Transaction updated successfully",
         "transaction": transaction
     }
-
-#7 Summary By Category
-@router.get("/summary/categories")
-def get_category_summary(db: Session = Depends(get_db)):
-    all_transactions = db.query(models.Transaction).all()
-    summary = {}
-    for t in all_transactions:
-        total_cost = t.price * t.quantity
-        if t.category in summary:
-            summary[t.category] += total_cost
-        else:
-            summary[t.category] = total_cost
-    return summary
