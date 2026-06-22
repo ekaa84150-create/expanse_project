@@ -20,7 +20,7 @@ def register_user(user_data: UserCreateSchema, db: Session = Depends(get_db)):
     if existing_user:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Username sudah terdaftar, Ton!"
+            detail="Username sudah terdaftar"
         )
     
     # 2. Hash password biar aman
