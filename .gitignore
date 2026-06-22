@@ -1,0 +1,18 @@
+# Mengabaikan folder cache Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Mengabaikan database SQLite lokal lu
+*.db
+*.sqlite3
+
+# Mengabaikan virtual environment (jika folder venv lu taruh di sini)
+venv/
+.venv/
+env/
+
+# Mengabaikan folder konfigurasi teks editor
+.vscode/
+.idea/
