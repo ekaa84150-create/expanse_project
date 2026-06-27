@@ -2,8 +2,9 @@ from fastapi import APIRouter, HTTPException, Depends, status
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 from datetime import datetime
+from auth.security import get_current_user # Satpam token JWT
 import uuid
-
+import database
 from database import get_db
 import models
 
@@ -12,7 +13,9 @@ router = APIRouter(
     tags=["Transactions"]
 )
 
-# 1. SCHEMA BARU (Memakai price & quantity, bukan amount lagi)
+
+#         1. VALIDASI SCHEMA DATA
+
 class TransactionSchema(BaseModel):
     category: str = Field(min_length=1, description="Category cannot be empty")
     price: int = Field(gt=0, description="Price must be greater than zero")
@@ -29,11 +32,20 @@ class TransactionSchema(BaseModel):
             raise ValueError("Date must be in DD-MM-YYYY format")
 
 
-# 2. CREATE TRANSACTION (POST /transactions)
+
+#         2. CRUD & LOGIC ENDPOINTS
+
+
+# 🟢 CREATE TRANSACTION (Otomatis ngiket user_id dari token)
 @router.post("/", status_code=status.HTTP_201_CREATED)
-def create_transaction(transaction: TransactionSchema, db: Session = Depends(get_db)):
+def create_transaction(
+    transaction: TransactionSchema, 
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user) # Wajib Login
+):
     db_transaction = models.Transaction(**transaction.model_dump())
     db_transaction.id = str(uuid.uuid4())
+    db_transaction.user_id = current_user.id # Ambil id dari akun yg login!
 
     db.add(db_transaction)
     db.commit()
@@ -45,18 +57,24 @@ def create_transaction(transaction: TransactionSchema, db: Session = Depends(get
     }
 
 
-# 3. READ ALL (GET /transactions)
+# 🔵 READ ALL (Cuma nampilin transaksi milik user yang lagi login)
 @router.get("/")
-def get_transactions(db: Session = Depends(get_db)):
-    return db.query(models.Transaction).all()
+def get_transactions(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user) # Wajib Login
+):
+    return db.query(models.Transaction).filter(models.Transaction.user_id == current_user.id).all()
 
 
-# 4. SUMMARY BY CATEGORY (Statis ditaruh di atas dinamis)
+# 📊 SUMMARY BY CATEGORY (Cuma ngitung pengeluaran milik user yang lagi login)
 @router.get("/summary/categories")
-def get_category_summary(db: Session = Depends(get_db)):
-    all_transactions = db.query(models.Transaction).all()
+def get_category_summary(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user) # Wajib Login
+):
+    user_transactions = db.query(models.Transaction).filter(models.Transaction.user_id == current_user.id).all()
     summary = {}
-    for t in all_transactions:
+    for t in user_transactions:
         total_cost = t.price * t.quantity
         if t.category in summary:
             summary[t.category] += total_cost
@@ -65,28 +83,43 @@ def get_category_summary(db: Session = Depends(get_db)):
     return summary
 
 
-# 5. TOTAL EXPENDITURE (Statis ditaruh di atas dinamis)
+# 💰 TOTAL EXPENDITURE (Cuma kalkulasi total belanjaan user yang lagi login)
 @router.get("/total")
-def get_total_expenditure(db: Session = Depends(get_db)):
-    all_transactions = db.query(models.Transaction).all()
+def get_total_expenditure(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user) # Wajib Login
+):
+    user_transactions = db.query(models.Transaction).filter(models.Transaction.user_id == current_user.id).all()
 
     total_expenditure = 0
     total_item_bought = 0
 
-    for t in all_transactions:
+    for t in user_transactions:
         total_expenditure += (t.price * t.quantity)
         total_item_bought += t.quantity
+        
     return {
         "total_expenditure": total_expenditure,
         "total_item_bought": total_item_bought
     }
 
-#5.5 Filter By Month And Year
-@router.get ("/filter")
-def filter_transactions_by_date(month: str, year: str, db: Session = Depends(get_db)):
-    date_pattern = f"%-{month}-{year}"
+
+# 📅 FILTER BY MONTH AND YEAR (Cuma nyari transaksi user yang lagi login)
+@router.get("/filter")
+def filter_transactions_by_date(
+    month: str, 
+    year: str, 
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user) # Wajib Login
+):
+    # Pola pencarian kecocokan string tanggal
+    date_pattern = f"%{month}-{year}"
     
-    filtered_data = db.query(models.Transaction).filter(models.Transaction.date.like(date_pattern)).all()
+    filtered_data = db.query(models.Transaction).filter(
+        models.Transaction.user_id == current_user.id,
+        models.Transaction.date.like(date_pattern)
+    ).all()
+    
     return {
         "month": month,
         "year": year,
@@ -94,13 +127,21 @@ def filter_transactions_by_date(month: str, year: str, db: Session = Depends(get
         "transactions": filtered_data
     }
 
-# 6. READ BY ID (GET /transactions/{transaction_id})
+
+# 🔍 READ BY ID (Cek ID spesifik dan pastiin itu emang milik dia)
 @router.get("/{transaction_id}")
-def get_transaction(transaction_id: str, db: Session = Depends(get_db)):
-    transaction = db.query(models.Transaction).filter(models.Transaction.id == transaction_id).first()
+def get_transaction(
+    transaction_id: str, 
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user) # Wajib Login
+):
+    transaction = db.query(models.Transaction).filter(
+        models.Transaction.id == transaction_id,
+        models.Transaction.user_id == current_user.id
+    ).first()
 
     if not transaction:
-        raise HTTPException(status_code=404, detail="Transaction not found")
+        raise HTTPException(status_code=404, detail="Transaction not found or unauthorized")
 
     return {
         "message": "Transaction found",
@@ -108,13 +149,20 @@ def get_transaction(transaction_id: str, db: Session = Depends(get_db)):
     }
 
 
-# 7. DELETE BY ID (DELETE /transactions/{transaction_id})
+# ❌ DELETE BY ID
 @router.delete("/{transaction_id}")
-def delete_transaction(transaction_id: str, db: Session = Depends(get_db)):
-    transaction = db.query(models.Transaction).filter(models.Transaction.id == transaction_id).first()
+def delete_transaction(
+    transaction_id: str, 
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user) # Wajib Login
+):
+    transaction = db.query(models.Transaction).filter(
+        models.Transaction.id == transaction_id,
+        models.Transaction.user_id == current_user.id
+    ).first()
 
     if not transaction:
-        raise HTTPException(status_code=404, detail="Transaction not found")
+        raise HTTPException(status_code=404, detail="Transaction not found or unauthorized")
 
     db.delete(transaction)
     db.commit()
@@ -124,13 +172,21 @@ def delete_transaction(transaction_id: str, db: Session = Depends(get_db)):
     }
 
 
-# 8. UPDATE BY ID (PUT /transactions/{transaction_id})
+# 🔄 UPDATE BY ID
 @router.put("/{transaction_id}")
-def update_transaction(transaction_id: str, updated_transaction: TransactionSchema, db: Session = Depends(get_db)):
-    transaction = db.query(models.Transaction).filter(models.Transaction.id == transaction_id).first()
+def update_transaction(
+    transaction_id: str, 
+    updated_transaction: TransactionSchema, 
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user) # Wajib Login
+):
+    transaction = db.query(models.Transaction).filter(
+        models.Transaction.id == transaction_id,
+        models.Transaction.user_id == current_user.id
+    ).first()
 
     if not transaction:
-        raise HTTPException(status_code=404, detail="Transaction not found")
+        raise HTTPException(status_code=404, detail="Transaction not found or unauthorized")
 
     transaction.category = updated_transaction.category
     transaction.price = updated_transaction.price
