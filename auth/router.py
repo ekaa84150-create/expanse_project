@@ -25,9 +25,6 @@ oauth.register(
     client_kwargs={'scope': 'openid email profile'}
 )
 
-print("CLIENT ID:", os.getenv("GOOGLE_CLIENT_ID"))
-print("CLIENT SECRET:", os.getenv("GOOGLE_CLIENT_SECRET"))
-
 # 1. ROUTE LOGIN GOOGLE
 @router.get("/google/login")
 async def google_login(request: Request):

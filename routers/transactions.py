@@ -36,7 +36,7 @@ class TransactionSchema(BaseModel):
 #         2. CRUD & LOGIC ENDPOINTS
 
 
-# 🟢 CREATE TRANSACTION (Otomatis ngiket user_id dari token)
+# CREATE TRANSACTION (Otomatis ngiket user_id dari token)
 @router.post("/", status_code=status.HTTP_201_CREATED)
 def create_transaction(
     transaction: TransactionSchema, 
@@ -57,7 +57,7 @@ def create_transaction(
     }
 
 
-# 🔵 READ ALL (Cuma nampilin transaksi milik user yang lagi login)
+# READ ALL (Cuma nampilin transaksi milik user yang lagi login)
 @router.get("/")
 def get_transactions(
     db: Session = Depends(get_db),
@@ -66,7 +66,7 @@ def get_transactions(
     return db.query(models.Transaction).filter(models.Transaction.user_id == current_user.id).all()
 
 
-# 📊 SUMMARY BY CATEGORY (Cuma ngitung pengeluaran milik user yang lagi login)
+# SUMMARY BY CATEGORY (Cuma ngitung pengeluaran milik user yang lagi login)
 @router.get("/summary/categories")
 def get_category_summary(
     db: Session = Depends(get_db),
@@ -83,7 +83,7 @@ def get_category_summary(
     return summary
 
 
-# 💰 TOTAL EXPENDITURE (Cuma kalkulasi total belanjaan user yang lagi login)
+# TOTAL EXPENDITURE (Cuma kalkulasi total belanjaan user yang lagi login)
 @router.get("/total")
 def get_total_expenditure(
     db: Session = Depends(get_db),
@@ -104,7 +104,7 @@ def get_total_expenditure(
     }
 
 
-# 📅 FILTER BY MONTH AND YEAR (Cuma nyari transaksi user yang lagi login)
+# FILTER BY MONTH AND YEAR (Cuma nyari transaksi user yang lagi login)
 @router.get("/filter")
 def filter_transactions_by_date(
     month: str, 
@@ -128,7 +128,7 @@ def filter_transactions_by_date(
     }
 
 
-# 🔍 READ BY ID (Cek ID spesifik dan pastiin itu emang milik dia)
+# READ BY ID (Cek ID spesifik dan pastiin itu emang milik dia)
 @router.get("/{transaction_id}")
 def get_transaction(
     transaction_id: str, 
@@ -149,7 +149,7 @@ def get_transaction(
     }
 
 
-# ❌ DELETE BY ID
+# DELETE BY ID
 @router.delete("/{transaction_id}")
 def delete_transaction(
     transaction_id: str, 
@@ -172,7 +172,7 @@ def delete_transaction(
     }
 
 
-# 🔄 UPDATE BY ID
+# UPDATE BY ID
 @router.put("/{transaction_id}")
 def update_transaction(
     transaction_id: str, 
